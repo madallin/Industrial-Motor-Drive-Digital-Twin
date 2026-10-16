@@ -79,7 +79,7 @@ class ServiceManager:
         if self.settings['octave']['activ']:
             if self.octave:
                 try:
-                    self.launch('octave', [self.octave, '--quiet', '--no-gui', '--eval', 'run_psim_supervisor()'], self.octave_environment(), PROJECT_ROOT / 'matlab')
+                    self.launch('octave', [self.octave, '--quiet', '--no-gui', '--eval', 'run_psim_supervisor()'], self.octave_environment(), PROJECT_ROOT / 'octave')
                 except OSError:
                     self.messages['octave'] = 'Executabilul GNU Octave nu a putut fi pornit.'
             else:

@@ -4,10 +4,10 @@ close all;
 
 %% Paths
 scriptDir = fileparts(mfilename('fullpath'));
-matlabRoot = fileparts(scriptDir);
+modelRoot = fileparts(scriptDir);
 
-srcDir = fullfile(matlabRoot, 'src');
-resultsDir = fullfile(matlabRoot, 'results');
+srcDir = fullfile(modelRoot, 'src');
+resultsDir = fullfile(modelRoot, 'results');
 
 addpath(srcDir);
 

@@ -2,8 +2,8 @@ clear;
 clc;
 
 testDir = fileparts(mfilename('fullpath'));
-matlabRoot = fileparts(testDir);
-srcDir = fullfile(matlabRoot, 'src');
+modelRoot = fileparts(testDir);
+srcDir = fullfile(modelRoot, 'src');
 
 addpath(srcDir);
 

@@ -20,8 +20,8 @@ config/*.local.json
 .orchestrator.lock
 results/*
 !results/.gitkeep
-matlab/results/*
-!matlab/results/.gitkeep
+octave/results/*
+!octave/results/.gitkeep
 *.log
 
 # PSIM/Simview generated data and temporary backups; keep *.psimsch

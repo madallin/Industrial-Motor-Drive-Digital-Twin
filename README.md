@@ -6,12 +6,7 @@ PSIM computes the electrical and mechanical response. The DLL controls drive seq
 
 The current implementation targets **Windows and the PSIM x86 General DLL interface**. Operator labels are in Romanian. Physical motor integration and hardware PLC deployment are outside the current scope.
 
-> **Screenshot placeholder — Operation**  
-> Add `docs/assets/hmi-operation.png`: a real PSIM run with the motor state, measurements, trend, and control panel visible.
-
-<!-- Replace the placeholder above with the following image when available:
 ![Motor operation: measurements, trend, and drive controls](docs/assets/hmi-operation.png)
--->
 
 ## Contents
 
@@ -22,11 +17,11 @@ The current implementation targets **Windows and the PSIM x86 General DLL interf
 - [Motor control](#motor-control)
 - [Monitoring and diagnostics](#monitoring-and-diagnostics)
 - [Configuration](#configuration)
+- [MATLAB compatibility](#matlab-compatibility)
 - [Recordings and storage](#recordings-and-storage)
 - [Verification](#verification)
 - [Troubleshooting](#troubleshooting)
 - [Repository layout](#repository-layout)
-- [Documentation images](#documentation-images)
 
 ## Architecture
 
@@ -52,7 +47,7 @@ flowchart LR
 | Python backend | Process lifecycle, validated operator requests, current-state API, recording access, and MQTT publication |
 | Browser HMI | Operator inputs, measured values, interactive trends, alarms, and recording export |
 
-The running system takes its measurements from PSIM. The analytical motor calculations in `matlab/src/` are separate utilities, not an independent dynamic motor simulation running behind the HMI. MQTT publishes telemetry only; it has no motor command path.
+The running system takes its measurements from PSIM. The analytical motor calculations in `octave/src/` are separate utilities, not an independent dynamic motor simulation running behind the HMI. MQTT publishes telemetry only; it has no motor command path.
 
 ## Requirements
 
@@ -135,10 +130,7 @@ Ctrl+C in the application terminal also shuts down its owned services. PSIM is s
 
 The schematic implements a three-phase rectifier, DC-link precharge circuit, six-switch inverter, and induction motor with an externally controlled mechanical load. A V/f reference generator and PWM logic drive the inverter.
 
-> **Image placeholder — Complete circuit**  
-> Add `docs/assets/psim-circuit.png`: the complete schematic, including the power stage, motor, precharge, V/f control, PWM gates, and DLL block. Export or capture it at a resolution that preserves the labels.
-
-<!-- ![PSIM motor drive schematic](docs/assets/psim-circuit.png) -->
+![PSIM schematic showing the rectifier, DC link, inverter, induction motor, PWM logic, and HMI DLL block](docs/assets/psim-circuit.png)
 
 | Port | Signal | Connection / unit |
 | --- | --- | --- |
@@ -152,10 +144,7 @@ The schematic implements a three-phase rectifier, DC-link precharge circuit, six
 
 `RUN` is the **PWM permission output**. It remains active during normal deceleration. The external `FREQ_RAMP` is a secondary rate limiter; its slopes and units must permit the requested HMI ramps, otherwise it can extend acceleration or stopping time.
 
-> **Image placeholder — DLL wiring detail**  
-> Add `docs/assets/psim-dll-wiring.png`: a readable detail of IN1–IN4, OUT1–OUT3, `AND_HMI_ENABLE`, `FREQ_RAMP`, and the mechanical-load input.
-
-<!-- ![DLL measurement inputs and motor command outputs](docs/assets/psim-dll-wiring.png) -->
+The [DLL block port diagram](docs/assets/psim-dll-wiring.png) shows the measurement inputs and command outputs.
 
 The bridge maintains static controller state and is intended for **one block instance in this schematic**. Its TCP destination is compiled as `127.0.0.1:5050`. Changing the Octave receiver port requires rebuilding the DLL with a matching `PORT_HMI` value.
 
@@ -237,10 +226,7 @@ Charts use simulation time and preserve reported sampling gaps. The cursor follo
 
 Protection RMS is calculated in the DLL from solver-step current samples over a 20 ms window. Displayed Octave RMS uses decimated TCP measurements and can be affected by PWM aliasing. Only phase U current is measured.
 
-> **Screenshot placeholder — Diagnostics**  
-> Add `docs/assets/hmi-diagnostics.png`: controller availability and an actual alarm or event from PSIM, with its condition and timestamp visible.
-
-<!-- ![Drive diagnostics and recorded events](docs/assets/hmi-diagnostics.png) -->
+![HMI diagnostics showing drive state, alarms, and controller events](docs/assets/hmi-diagnostics.png)
 
 Stale measurements withdraw current readings and motor command availability. Historical data is marked as a recording. A browser-to-backend interruption does not itself stop the motor; backend/Octave or Octave/DLL loss is handled by the backend lease and DLL communication protection. MQTT loss does not stop the drive.
 
@@ -286,6 +272,12 @@ With the default prefix `industrial-drive/v2`:
 
 Credentials can be supplied through `IDRIVE_MQTT_USER` and `IDRIVE_MQTT_PASSWORD`. Keep credentials out of the shared configuration and repository.
 
+## MATLAB compatibility
+
+The analytical motor model in `octave/src/`, its baseline entry point in `octave/scripts/run_baseline.m`, and the corresponding motor-model test use MATLAB-compatible `.m` syntax and are intended to run in both MATLAB and GNU Octave. PSIM remains the source of simulated electrical and mechanical behavior; these scripts perform separate calculations.
+
+The live PSIM supervisor and data path require GNU Octave. They use Octave-specific syntax and the `instrument-control` package for TCP communication, so the full application is **not currently compatible with MATLAB as-is**. MATLAB is not installed in the verification environment, so MATLAB execution has not been independently tested.
+
 ## Recordings and storage
 
 Each segment under `results/` contains:
@@ -300,10 +292,7 @@ Samples contain measured and calculated values; events contain transitions and d
 
 The backend keeps bounded recording windows and aggregates chart points. CSV export returns the recorded file, not the reduced chart data. The rolling quota removes eligible older finalized segments while protecting the active segment and the two newest segments. It is a retention target rather than a hard filesystem cap.
 
-> **Screenshot placeholder — Recordings**  
-> Add `docs/assets/hmi-recordings.png`: a selected session, its time range, recorded curve, and export controls.
-
-<!-- ![Recorded motor measurements and CSV export](docs/assets/hmi-recordings.png) -->
+![Recorded motor measurements, selected session, trend, and export controls](docs/assets/hmi-recordings.png)
 
 Application retention does not limit PSIM's `.smv` files or solver memory. Configure PSIM's print interval separately for long Free Run sessions. At a 1 µs solver step, print step 1000 records one point per millisecond per signal; this reduces output volume but cannot resolve a 2 kHz switching waveform. Use shorter, higher-resolution runs to inspect PWM behavior.
 
@@ -331,7 +320,7 @@ node --check dashboard/charts.js
 node --test tests/test_hmi_ui.js tests/test_hmi_charts.js
 ```
 
-The Python suite compiles native controller tests and requires MinGW32 GCC at the path specified in `tests/test_drive_controller.py`. For Octave checks, run from `matlab/`:
+The Python suite compiles native controller tests and requires MinGW32 GCC at the path specified in `tests/test_drive_controller.py`. For Octave checks, run from `octave/`:
 
 ```octave
 addpath('tests');
@@ -369,8 +358,8 @@ bridge/                  C controller, PSIM TCP bridge, x86 build script
 config/                  Shared application configuration
 dashboard/               HTML/CSS/JavaScript HMI and local HTTP server
 docs/                    Control, verification, and design notes
-  assets/                Documentation screenshots and images
-matlab/                  Octave supervisor, diagnostics, and persistence
+  assets/                HMI screenshots and PSIM schematics used below
+octave/                  GNU Octave supervisor, diagnostics, and persistence
   src/                   Separate analytical motor calculations
   scripts/               Explicit baseline calculation entry point
   tests/                 Numerical and diagnostic checks
@@ -382,18 +371,4 @@ orchestrator.py          Application lifecycle entry point
 start.bat / stop.bat     Windows launch and shutdown commands
 ```
 
-Additional guides: [Drive control](docs/control_hmi.md) · [Data verification](docs/psim_data_verification.md) · [HMI design](docs/hmi_design.md) · [Control audit](docs/plc_hmi_audit.md) · [Octave module](matlab/README.md). These supporting guides currently use Romanian.
-
-## Documentation images
-
-The three Mermaid diagrams render directly on GitHub and remain editable in this file. Screenshot placeholders appear where the images belong; their Markdown image links are commented out until the files exist.
-
-| File under `docs/assets/` | Capture |
-| --- | --- |
-| `hmi-operation.png` | Running motor with readable measurements, trend, and START/STOP panel |
-| `psim-circuit.png` | Complete power circuit and control schematic |
-| `psim-dll-wiring.png` | Measurement inputs and all three command outputs |
-| `hmi-diagnostics.png` | Actual controller state, event or alarm, and timestamp |
-| `hmi-recordings.png` | Selected recording, curve, metadata, and export controls |
-
-Use captures from actual PSIM runs. Keep labels readable at the repository page width and crop out unrelated desktop content or personal paths. Add each file, then replace its placeholder with the adjacent commented Markdown image line.
+Additional guides: [Drive control](docs/control_hmi.md) · [Data verification](docs/psim_data_verification.md) · [HMI design](docs/hmi_design.md) · [Control audit](docs/plc_hmi_audit.md) · [Octave module](octave/README.md).
