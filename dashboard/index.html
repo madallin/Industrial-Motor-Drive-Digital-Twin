@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#182c38">
+  <title>Industrial Motor Drive Digital Twin</title>
+  <link rel="stylesheet" href="/app.css">
+  <script src="/charts.js" defer></script>
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Salt la conținut</a>
+  <header class="application-bar">
+    <strong class="brand">Industrial Motor Drive Digital Twin</strong>
+  </header>
+  <nav class="navigation" aria-label="Secțiuni">
+    <button data-page="operation" class="selected" aria-current="page">Operare</button>
+    <button data-page="diagnostic">Diagnostic</button>
+    <button data-page="recordings">Înregistrări</button>
+  </nav>
+  <main id="main-content">
+    <div class="heading">
+      <div><h1 id="page-title">Operare motor</h1><span id="live-timestamp" class="subtitle"></span></div>
+      <label class="inline-select">Interval
+        <select id="time-window"><option value="5">5 s</option><option value="30" selected>30 s</option><option value="120">120 s</option><option value="86400">Tot intervalul</option></select>
+      </label>
+    </div>
+    <p id="connection-error" class="message alarm" role="alert" hidden></p>
+    <section id="page-operation" class="page" aria-label="Operare motor">
+      <div class="drive-state-bar">
+        <div class="motor-state"><span class="label">Motor</span><div class="drive-status" id="drive-status" data-state="offline"><span class="status-light" aria-hidden="true"></span><p id="controller-state" role="status">Indisponibil</p></div></div>
+        <div><span class="label">Comunicație</span><strong id="communication-status">Fără măsurători</strong></div>
+        <button id="alarm-summary" class="alarm-summary" data-tone="neutral" aria-label="Deschide diagnosticul">Diagnostic indisponibil</button>
+      </div>
+      <div class="operation-area">
+        <div class="monitoring">
+          <div class="measurements" aria-label="Măsurători motor">
+            <article><h2>Turație</h2><div class="reading"><strong id="reading-rpm">—</strong><span>rpm</span></div></article>
+            <article><h2>Frecvență</h2><div class="reading"><strong id="reading-frecventa">—</strong><span>Hz</span></div><p>După rampă</p></article>
+            <article><h2>Curent · faza U</h2><div class="reading"><strong id="reading-curent">—</strong><span>A</span></div><p>Instantaneu</p></article>
+            <article><h2>Curent RMS</h2><div class="reading"><strong id="reading-rms">—</strong><span>A</span></div><p>Estimat</p></article>
+            <article><h2>Tensiune DC-link</h2><div class="reading"><strong id="reading-vdc">—</strong><span>V</span></div></article>
+          </div>
+          <article class="panel signal">
+            <div class="panel-heading"><h2>Evoluție</h2><label class="inline-select"><span class="sr-only">Semnal</span>
+              <select id="signal-selector"><option value="rpm">Turație</option><option value="frecventa">Frecvență</option><option value="curent">Curent de fază</option><option value="rms">RMS estimat</option><option value="vdc">Tensiune DC-link</option></select>
+            </label></div>
+            <div class="chart-tools"><label class="inline-select">Scară Y<select id="live-scale"><option value="auto">Automată</option><option value="fix">Interval fix</option></select></label><button id="reframe-live-chart" class="subtle-button" title="Recalculează scara pentru intervalul vizibil">Reîncadrează</button><span id="live-scale-note" class="scale-note"></span></div>
+            <div class="chart-area"><p id="empty-live-chart" class="empty-state">Așteptare măsurători</p><canvas tabindex="0" id="live-chart" aria-label="Grafic în timp simulat. Săgețile deplasează cursorul." hidden></canvas></div>
+            <div class="chart-footer"><span id="chart-axis-context">Timp simulat [s]</span><span id="chart-context"></span></div>
+          </article>
+        </div>
+        <article class="panel commands" aria-label="Comandă motor">
+          <div class="panel-heading"><h2>Comandă motor</h2></div>
+          <div class="reason-space"><p id="control-reason" class="control-reason" hidden></p></div>
+          <form id="control-form" novalidate>
+            <fieldset>
+              <legend>Referințe</legend>
+              <div class="references">
+                <label for="frequency-input">Frecvență
+                  <span class="input-unit"><input id="frequency-input" aria-describedby="frequency-limit" type="number" min="0" max="50" step="0.1" value="50" required><span aria-hidden="true">Hz</span></span>
+                  <span class="field-hint" id="frequency-limit">0–50 Hz</span>
+                </label>
+                <label for="load-input">Sarcină
+                  <span class="input-unit"><input id="load-input" aria-describedby="load-limit" type="number" min="0" max="10" step="0.1" value="5" required><span aria-hidden="true">Nm</span></span>
+                  <span class="field-hint" id="load-limit">0–10 Nm</span>
+                </label>
+              </div>
+            </fieldset>
+            <details id="ramp-settings" class="ramp-settings">
+              <summary>Rampe <span id="ramp-summary">2 s / 5 s</span></summary>
+              <div class="references">
+                <label for="acceleration-input">Accelerare
+                  <span class="input-unit"><input id="acceleration-input" type="number" min="1" max="30" step="0.1" value="2" required><span aria-hidden="true">s</span></span>
+                  <span class="field-hint">0 → 50 Hz · 1–30 s</span>
+                </label>
+                <label for="deceleration-input">Decelerare
+                  <span class="input-unit"><input id="deceleration-input" type="number" min="2" max="60" step="0.1" value="5" required><span aria-hidden="true">s</span></span>
+                  <span class="field-hint">50 → 0 Hz · 2–60 s</span>
+                </label>
+              </div>
+            </details>
+            <button id="apply-references" class="apply" disabled>Aplică</button>
+          </form>
+          <div class="draft-space"><p id="draft-status" class="draft-status" hidden>Modificări neaplicate</p></div>
+          <div class="command-buttons">
+            <button id="start-command" class="start" title="Pornește cu referințele introduse" disabled><span class="play-icon" aria-hidden="true"></span>START</button>
+            <button id="stop-command" class="stop" title="Oprire cu decelerare" disabled><span class="stop-icon" aria-hidden="true"></span>STOP</button>
+          </div>
+          <button id="reset-command" class="reset" hidden disabled>Resetează protecția</button>
+          <p id="command-confirmation" class="confirmation" role="status" hidden></p>
+          <p id="command-message" role="alert" class="message alarm" hidden></p>
+        </article>
+      </div>
+    </section>
+    <section id="page-diagnostic" class="page" aria-label="Diagnostic motor" hidden>
+      <article class="panel"><div class="panel-heading"><h2>Stare sistem</h2><span id="process-state" class="subtitle">Fără date</span></div><dl class="diagnostic-grid"><div><dt>Pornire</dt><dd id="diagnostic-start">—</dd></div><div><dt>Măsurători</dt><dd id="diagnostic-communication">—</dd></div><div><dt>Controler</dt><dd id="diagnostic-controller">—</dd></div></dl><p id="diagnostic-reason" class="note"></p></article>
+      <article class="panel"><div class="panel-heading"><h2>Alarme și avertizări</h2><span id="alarm-note" class="subtitle"></span></div><div class="table-container"><table><thead><tr><th>Stare</th><th>Severitate</th><th>Condiție</th><th>Activare [s]</th><th>Revenire [s]</th><th>Valoare</th></tr></thead><tbody id="alarm-table"></tbody></table></div></article>
+      <details class="panel sample-details"><summary>Calcule motor</summary><p class="note">Abatere raportată la turația sincronă, calculată din frecvență și numărul de poli.</p><dl class="diagnostic-grid"><div><dt>Turație sincronă</dt><dd id="synchronous-speed-calculation">—</dd></div><div><dt>Turație măsurată</dt><dd id="measured-speed-calculation">—</dd></div><div><dt>Abatere relativă</dt><dd id="speed-error-calculation">—</dd></div></dl></details>
+      <article class="panel"><div class="panel-heading"><h2>Evenimente</h2><span class="subtitle">Timp simulat</span></div><div class="table-container"><table><thead><tr><th>Timp [s]</th><th>Tip</th><th>Eveniment</th><th>Valoare</th></tr></thead><tbody id="event-table"></tbody></table></div></article>
+    </section>
+    <section id="page-recordings" class="page" aria-label="Înregistrări" hidden>
+      <p id="recordings-empty" class="recordings-empty">Nu există înregistrări.</p>
+      <div id="recording-content" hidden>
+        <article class="panel"><div class="panel-heading"><h2>Măsurători înregistrate</h2><label class="inline-select"><span class="sr-only">Semnal înregistrat</span><select id="recording-signal-selector"><option value="rpm">Turație</option><option value="frecventa">Frecvență</option><option value="curent">Curent de fază</option><option value="rms">RMS estimat</option><option value="vdc">Tensiune DC-link</option></select></label></div>
+          <div class="recording-toolbar"><label>Sesiune<select id="recording-selector"></select></label><a id="export-samples" class="button" aria-disabled="true">Export măsurători</a><a id="export-events" class="button" aria-disabled="true">Export evenimente</a></div>
+          <p id="recording-metadata" class="note"></p>
+          <div class="chart-tools"><label class="inline-select">Scară Y<select id="recording-scale"><option value="auto">Automată</option><option value="fix">Interval fix</option></select></label><button id="reframe-recording-chart" class="subtle-button">Reîncadrează</button><span id="recording-scale-note" class="scale-note"></span></div>
+          <div class="chart-area"><p id="empty-recording-chart" class="empty-state"></p><canvas tabindex="0" id="recording-chart" aria-label="Grafic înregistrat. Săgețile deplasează cursorul." hidden></canvas></div>
+          <div class="chart-footer"><span>Timp simulat [s]</span></div>
+        </article>
+        <article class="panel"><div class="panel-heading"><h2>Evenimente înregistrate</h2><span class="subtitle">Ultimele 50 din jurnal</span></div><div class="table-container"><table><thead><tr><th>Timp [s]</th><th>Tip</th><th>Eveniment</th><th>Valoare</th></tr></thead><tbody id="recording-events"></tbody></table></div></article>
+        <details class="panel sample-details"><summary>Eșantioane înregistrate <span class="subtitle">Ultimele 50 din interval</span></summary><div class="table-container"><table><thead><tr><th>Timp [s]</th><th>Turație [rpm]</th><th>Curent [A]</th><th>RMS estimat [A]</th><th>DC-link [V]</th><th>Frecvență [Hz]</th></tr></thead><tbody id="recording-table"></tbody></table></div></details>
+      </div>
+    </section>
+    <output id="chart-readout" hidden></output>
+  </main>
+</body>
+</html>
+

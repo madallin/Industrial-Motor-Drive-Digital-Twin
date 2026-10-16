@@ -1,0 +1,56 @@
+# Python and local environments
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# Local settings and secrets; keep config/app_config.json as the shared default
+.env
+.env.*
+!.env.example
+config/*.local.json
+
+# Runtime state, logs and recorded measurements
+.runtime.json
+.orchestrator.lock
+results/*
+!results/.gitkeep
+matlab/results/*
+!matlab/results/.gitkeep
+*.log
+
+# PSIM/Simview generated data and temporary backups; keep *.psimsch
+*.smv
+*.smv~
+*.psimsch~
+*.psimsch.bak
+*.bak
+*.asv
+*.autosave
+
+# Compiled bridge and native build artifacts; build from bridge/*.c
+bridge/*.dll
+*.exe
+*.o
+*.obj
+*.lib
+*.exp
+*.pdb
+*.dll.a
+
+# MATLAB/Octave generated code
+slprj/
+codegen/
+octave-workspace
+
+# Editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini

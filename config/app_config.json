@@ -1,0 +1,81 @@
+{
+  "port_web": 8765,
+  "deschide_browser": true,
+  "director_rezultate": "results",
+  "fereastra_s": 30,
+  "puncte_maxime": 1000,
+  "date_vechi_s": 3,
+  "retentie_zile": 0,
+  "octave": {
+    "executabil": "",
+    "activ": true
+  },
+  "psim": {
+    "receptie_activa": true,
+    "port_tcp": 5050,
+    "segment_s": 60
+  },
+  "control": {
+    "frecventa_max_hz": 50,
+    "sarcina_max_nm": 10,
+    "expirare_comanda_s": 5,
+    "psim_activ": true,
+    "acceleration_s": 2,
+    "deceleration_s": 5,
+    "watchdog_s": 2,
+    "backend_lease_s": 2
+  },
+  "mqtt": {
+    "activ": true,
+    "adresa": "127.0.0.1",
+    "port": 1883,
+    "prefix": "industrial-drive/v2",
+    "porneste_broker_local": true,
+    "executabil_broker": ""
+  },
+  "diagnostic": {
+    "ready_vdc_low_v": 510,
+    "ready_vdc_high_v": 610,
+    "ready_hold_s": 0.1,
+    "ready_span_max_v": 15,
+    "ready_min_count": 80,
+    "stop_vdc_max_v": 10,
+    "sample_window_s": 0.2,
+    "sample_min_count": 80,
+    "warn_hold_s": 0.15,
+    "clear_hold_s": 0.2,
+    "current_enable_after_s": 0.5,
+    "current_warn_a": 9.0,
+    "current_alarm_a": 12.3,
+    "current_clear_warn_a": 8.2,
+    "current_clear_alarm_a": 11.07,
+    "vdc_enable_after_s": 0.35,
+    "vdc_warn_low_v": 510,
+    "vdc_alarm_low_v": 470,
+    "vdc_warn_high_v": 610,
+    "vdc_alarm_high_v": 650,
+    "vdc_warn_low_clear_v": 525,
+    "vdc_alarm_low_clear_v": 490,
+    "vdc_warn_high_clear_v": 595,
+    "vdc_alarm_high_clear_v": 630,
+    "motor_pole_pairs": 2,
+    "speed_enable_f_hz": 45,
+    "speed_settle_s": 0.35,
+    "speed_warn_pct": 10,
+    "speed_alarm_pct": 20,
+    "speed_warn_clear_pct": 7,
+    "speed_alarm_clear_pct": 15
+  },
+  "protection": {
+    "rated_current_a": 8.2,
+    "trip_current_a": 12.3,
+    "dc_low_v": 470,
+    "dc_high_v": 650,
+    "max_speed_rpm": 1650,
+    "ready_low_v": 510,
+    "ready_high_v": 610
+  },
+  "recording": {
+    "max_storage_mb": 512
+  }
+}
