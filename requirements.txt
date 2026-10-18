@@ -1,0 +1,3 @@
+# WebSocket is optional at runtime; HTTP monitoring remains available without it.
+websockets>=15,<17
+-r mqtt/requirements.txt

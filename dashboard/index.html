@@ -7,6 +7,8 @@
   <title>Industrial Motor Drive Digital Twin</title>
   <link rel="stylesheet" href="/app.css">
   <script src="/charts.js" defer></script>
+  <script src="/transport.js" defer></script>
+  <script src="/iiot.js" defer></script>
   <script src="/app.js" defer></script>
 </head>
 <body>
@@ -95,12 +97,20 @@
       </div>
     </section>
     <section id="page-diagnostic" class="page" aria-label="Diagnostic motor" hidden>
+      <details id="integration-details" class="panel sample-details"><summary>Comunicații și istoric</summary>
+        <dl class="diagnostic-grid"><div><dt>Monitorizare HMI</dt><dd id="transport-status">Conectare…</dd></div><div><dt>Broker MQTT</dt><dd id="mqtt-status">—</dd></div><div><dt>Istoric structurat</dt><dd id="historian-status">—</dd></div></dl>
+      </details>
       <article class="panel"><div class="panel-heading"><h2>Stare sistem</h2><span id="process-state" class="subtitle">Fără date</span></div><dl class="diagnostic-grid"><div><dt>Pornire</dt><dd id="diagnostic-start">—</dd></div><div><dt>Măsurători</dt><dd id="diagnostic-communication">—</dd></div><div><dt>Controler</dt><dd id="diagnostic-controller">—</dd></div></dl><p id="diagnostic-reason" class="note"></p></article>
       <article class="panel"><div class="panel-heading"><h2>Alarme și avertizări</h2><span id="alarm-note" class="subtitle"></span></div><div class="table-container"><table><thead><tr><th>Stare</th><th>Severitate</th><th>Condiție</th><th>Activare [s]</th><th>Revenire [s]</th><th>Valoare</th></tr></thead><tbody id="alarm-table"></tbody></table></div></article>
       <details class="panel sample-details"><summary>Calcule motor</summary><p class="note">Abatere raportată la turația sincronă, calculată din frecvență și numărul de poli.</p><dl class="diagnostic-grid"><div><dt>Turație sincronă</dt><dd id="synchronous-speed-calculation">—</dd></div><div><dt>Turație măsurată</dt><dd id="measured-speed-calculation">—</dd></div><div><dt>Abatere relativă</dt><dd id="speed-error-calculation">—</dd></div></dl></details>
       <article class="panel"><div class="panel-heading"><h2>Evenimente</h2><span class="subtitle">Timp simulat</span></div><div class="table-container"><table><thead><tr><th>Timp [s]</th><th>Tip</th><th>Eveniment</th><th>Valoare</th></tr></thead><tbody id="event-table"></tbody></table></div></article>
+      <details class="panel sample-details"><summary>Notificări MQTT</summary><p class="note">Luarea la cunoștință înregistrează confirmarea operatorului și nu resetează protecția.</p><div class="table-container"><table><thead><tr><th>Ora recepției</th><th>Severitate</th><th>Sursă</th><th>Eveniment</th><th>Confirmare</th></tr></thead><tbody id="notification-table"></tbody></table></div></details>
     </section>
     <section id="page-recordings" class="page" aria-label="Înregistrări" hidden>
+      <details id="historian-details" class="panel sample-details"><summary>Consultare istoric și comparație</summary>
+        <div class="history-query"><label>Sesiune<select id="historian-session"></select></label><label>Compară cu<select id="historian-comparison"><option value="">Fără comparație</option></select></label><label>De la [s simulați]<input id="historian-start" type="number" min="0" value="0"></label><label>Până la [s simulați]<input id="historian-end" type="number" min="0" placeholder="Final sesiune"></label><button id="query-historian" type="button">Consultă</button></div>
+        <p id="historian-query-status" class="note" role="status"></p><div class="table-container"><table><thead><tr><th>Mărime</th><th>Sesiune: medie / minim / maxim</th><th>Comparație: medie / minim / maxim</th></tr></thead><tbody id="historian-table"></tbody></table></div>
+      </details>
       <p id="recordings-empty" class="recordings-empty">Nu există înregistrări.</p>
       <div id="recording-content" hidden>
         <article class="panel"><div class="panel-heading"><h2>Măsurători înregistrate</h2><label class="inline-select"><span class="sr-only">Semnal înregistrat</span><select id="recording-signal-selector"><option value="rpm">Turație</option><option value="frecventa">Frecvență</option><option value="curent">Curent de fază</option><option value="rms">RMS estimat</option><option value="vdc">Tensiune DC-link</option></select></label></div>

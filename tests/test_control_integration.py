@@ -97,6 +97,10 @@ def verify_dll(directory):
                 connection.sendall(b'CMD,2,1,30,4,2,5,0\n')
                 ack(lambda values: values[0] == 2 and values[1] == 0 and values[4] == 1)
                 assert traces[-1][2] == 0, 'Heartbeat-ul vechi nu trebuie sa reporneasca.'
+                # RESET requires 100 ms of stationary feedback after the trip.
+                # A zero PWM output alone doesn't establish that qualification.
+                stopped_at = traces[-1][0]
+                wait_for(lambda: traces[-1][0] >= stopped_at + 0.2)
                 connection.sendall(b'CMD,3,0,15,2,2,5,1\n')
                 ack(lambda values: values[0] == 3 and values[7] == 0)
                 ack(lambda values: values[6] == 5)

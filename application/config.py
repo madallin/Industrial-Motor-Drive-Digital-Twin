@@ -3,6 +3,7 @@ import json
 import math
 from pathlib import Path
 import shutil
+from .iiot_config import configure_iiot
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -78,6 +79,7 @@ def load_config(file_path=None):
     if not directory.is_relative_to(PROJECT_ROOT) or directory == PROJECT_ROOT:
         raise ValueError('Rezultatele trebuie pastrate intr-un subdirector al proiectului.')
     settings['director_rezultate'] = str(directory)
+    configure_iiot(settings)
     return settings
 
 

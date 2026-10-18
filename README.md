@@ -4,6 +4,8 @@ A local HMI for monitoring and controlling an induction motor drive simulated in
 
 PSIM computes the electrical and mechanical response. The DLL controls drive sequencing, frequency ramps, PWM permission, and simulated protections. Octave processes measurements and records each run. The HMI provides operator commands, trends, diagnostics, and CSV export.
 
+A sampled SQLite historian supports interval queries and session comparisons. WebSocket delivers current measurements and events to the HMI, while optional MQTT publication and notifications support motor monitoring.
+
 The current implementation targets **Windows and the PSIM x86 General DLL interface**. Operator labels are in Romanian. Physical motor integration and hardware PLC deployment are outside the current scope.
 
 ![Motor operation: measurements, trend, and drive controls](docs/assets/hmi-operation.png)
@@ -17,6 +19,7 @@ The current implementation targets **Windows and the PSIM x86 General DLL interf
 - [Motor control](#motor-control)
 - [Monitoring and diagnostics](#monitoring-and-diagnostics)
 - [Configuration](#configuration)
+- [IIoT integrations](#iiot-integrations)
 - [MATLAB compatibility](#matlab-compatibility)
 - [Recordings and storage](#recordings-and-storage)
 - [Verification](#verification)
@@ -28,6 +31,7 @@ The current implementation targets **Windows and the PSIM x86 General DLL interf
 ```mermaid
 flowchart LR
     HMI["Browser HMI"] <-->|"HTTP / JSON"| API["Python backend"]
+    API -->|"WebSocket: telemetry and events"| HMI
     API -->|"Command files and backend lease"| OCT["GNU Octave supervisor"]
     OCT -->|"Control feedback files"| API
     OCT -->|"Configuration, commands, heartbeat"| DLL["C DLL: drive controller"]
@@ -36,7 +40,10 @@ flowchart LR
     PLANT -->|"RPM, current, DC-link, frequency"| DLL
     OCT -->|"Samples, events, metadata"| DATA[("Local recordings")]
     DATA --> API
+    DATA -->|"Sampled background index"| SQL[("SQLite historian")]
+    SQL -->|"On-demand history queries"| API
     API -.->|"Optional telemetry"| MQTT["MQTT broker"]
+    MQTT -.->|"Motor and communication events"| API
 ```
 
 | Component | Responsibility |
@@ -46,6 +53,8 @@ flowchart LR
 | GNU Octave | TCP reception, command transport, measurement-derived diagnostics, and CSV/JSON persistence |
 | Python backend | Process lifecycle, validated operator requests, current-state API, recording access, and MQTT publication |
 | Browser HMI | Operator inputs, measured values, interactive trends, alarms, and recording export |
+| SQLite historian | Sampled PSIM history, state changes, and motor and communication events |
+| MQTT consumer | Deduplicated motor and communication notifications |
 
 The running system takes its measurements from PSIM. The analytical motor calculations in `octave/src/` are separate utilities, not an independent dynamic motor simulation running behind the HMI. MQTT publishes telemetry only; it has no motor command path.
 
@@ -55,7 +64,7 @@ The running system takes its measurements from PSIM. The analytical motor calcul
 | --- | --- |
 | Windows | Process management and native DLL execution |
 | PSIM with a compatible x86 General DLL interface | Runs the schematic and loads the bridge |
-| Python 3.10+ | Backend; the core application uses the standard library |
+| Python 3.10+ | Backend and SQLite; optional transport dependencies are in `requirements.txt` |
 | GNU Octave with `instrument-control` | TCP supervisor and numerical processing |
 | MSYS2 MinGW32 GCC | Builds the 32-bit DLL and native controller tests |
 | Modern browser | HMI; no frontend build step or external fonts |
@@ -67,6 +76,12 @@ The supplied [build script](bridge/build_hmi.bat) expects GCC at `C:\msys64\ming
 ## Getting started
 
 Run the PowerShell commands below from the repository root.
+
+```powershell
+py -3 -m pip install -r requirements.txt
+```
+
+This installs the WebSocket and MQTT clients. The local HTTP HMI remains usable without these optional transport libraries.
 
 ### 1. Configure Octave
 
@@ -98,11 +113,7 @@ Open `psim/smart_industrial_drive.psimsch`. In the `PSIM_OCTAVE_HMI` General DLL
 
 The launcher starts the backend and Octave supervisor, then opens **[http://127.0.0.1:8765/](http://127.0.0.1:8765/)**. Keep the application terminal open while operating the system.
 
-MQTT is enabled in the shared configuration but is optional. To use it, install Mosquitto and the Python dependency:
-
-```powershell
-py -3 -m pip install -r mqtt/requirements.txt
-```
+MQTT is enabled in the shared configuration but is optional. Install Mosquitto to use the local broker; its Python client is included in the dependencies above.
 
 Set `mqtt.activ` to `false` if it is not needed. The HMI and motor control work without a broker. An existing broker is reused and is not stopped by the orchestrator.
 
@@ -175,8 +186,8 @@ sequenceDiagram
         DLL-->>OCT: NACK with rejection reason
     end
     OCT-->>API: Persist control feedback and measurements
-    HMI->>API: Poll current state
-    API-->>HMI: Confirmation, drive state, and measurements
+    API-->>HMI: WebSocket confirmation, drive state, and measurements
+    Note over HMI,API: HTTP telemetry remains available as fallback
 ```
 
 A successful HTTP request means the backend queued a command. An **ACK** means the DLL accepted it. PWM status and measured `F_REF`/`MOTOR_RPM` establish whether the plant responded. These are separate stages and are presented separately in the HMI.
@@ -220,6 +231,8 @@ See [Motor control](docs/control_hmi.md) for detailed thresholds, reset conditio
 | **Diagnostic** — Diagnostics | Start availability, controller feedback, active and cleared alarms, events, synchronous speed, and relative speed deviation |
 | **Înregistrări** — Recordings | Session selection, recorded trends, closure status, events, sample inspection, and CSV export |
 
+The existing Diagnostics page also contains collapsed sections for communication status, historian availability, and MQTT notifications. A notification acknowledgement records operator awareness; it does not clear an alarm or RESET the drive. Recordings includes an on-demand SQLite interval query and a session comparison table, without duplicating the chart.
+
 Measured channels are shaft speed, phase U current, DC-link voltage, and frequency after the ramp. Octave adds estimated RMS current, synchronous speed, and relative speed deviation. The load entered in the HMI is a **reference**, not measured shaft torque.
 
 Charts use simulation time and preserve reported sampling gaps. The cursor follows samples using the mouse or keyboard: arrow keys move between samples, Home/End move to the ends, and Escape clears the cursor. Automatic scaling expands for new extremes; **Reîncadrează** (Reframe) fits the visible range again. Fixed chart ranges are display settings, not protection thresholds.
@@ -249,6 +262,7 @@ Stale measurements withdraw current readings and motor command availability. His
 | `recording.max_storage_mb` | `512` | Rolling recording quota, MiB |
 | `retentie_zile` | `0` | Age-based retention; zero disables age-based deletion |
 | `mqtt` | Enabled; port `1883` | Optional broker connection and telemetry output |
+| `iiot` | See file | Historian, WebSocket monitoring, and MQTT notifications |
 
 For local changes, copy the **complete** configuration to an ignored file such as `config/app.local.json`, then launch:
 
@@ -269,8 +283,21 @@ With the default prefix `industrial-drive/v2`:
 | `psim/telemetrie` | Current PSIM-derived telemetry |
 | `stare` | Publisher and acquisition state |
 | `alarme` | Informational alarm conditions |
+| `events` | Motor and communication events with stable IDs |
 
 Credentials can be supplied through `IDRIVE_MQTT_USER` and `IDRIVE_MQTT_PASSWORD`. Keep credentials out of the shared configuration and repository.
+
+## IIoT integrations
+
+| Integration | Default | Behavior |
+| --- | --- | --- |
+| SQLite | Enabled | Indexes PSIM samples every 0.05 simulation seconds, plus state changes and all recorded events; CSV exports remain unchanged |
+| WebSocket | Enabled | Pushes snapshots and ordered events over the existing local web port; automatically falls back to HTTP |
+| MQTT notifications | Enabled with MQTT | Separate subscriber, event IDs, deduplication, reconnect, and visual acknowledgement |
+
+Motor control remains local and does not depend on MQTT or an Internet connection. A remote MQTT observer requires TLS and read-only topic permissions; the HMI and command API remain bound to loopback.
+
+See [Monitoring and history](docs/iiot_integration.md) for data flow, message contracts, retention, and verification.
 
 ## MATLAB compatibility
 
@@ -298,6 +325,32 @@ Application retention does not limit PSIM's `.smv` files or solver memory. Confi
 
 Runtime state, recordings, logs, caches, and compiled binaries are excluded by [.gitignore](.gitignore). The schematic, source, shared configuration, tests, and documentation belong in Git.
 
+The sampled index is stored in `results/historian.sqlite3`. Its retention is independent of CSV retention: 30 days of ingestion history, 200,000 PSIM rows and 50,000 events by default. A separate 128 MiB database capacity limit is configured; WAL files and cleanup batches make this a bounded-storage policy rather than an exact filesystem quota. SQLite errors withdraw historian availability while leaving the drive command path operational.
+
+### Query recorded measurements
+
+Open `results/historian.sqlite3` in a SQLite client to inspect `sessions`, `samples`, and `events`. The following query returns the latest 20 indexed measurements from the most recently inserted recording segment. Time is in simulation seconds; RMS current is the Octave estimate.
+
+```sql
+SELECT
+    ROUND(sim_time_s, 3) AS time_s,
+    ROUND(rpm, 1) AS speed_rpm,
+    ROUND(rms, 3) AS current_rms_a,
+    ROUND(vdc, 1) AS dc_link_v,
+    ROUND(frecventa, 2) AS frequency_hz
+FROM samples
+WHERE session_id = (
+    SELECT session_id FROM samples ORDER BY rowid DESC LIMIT 1
+)
+ORDER BY sim_time_s DESC
+LIMIT 20;
+```
+
+<!-- Add docs/assets/sqlite-query-results.png showing this SQL query and its
+result grid from a recorded PSIM run, then uncomment the image below.
+![SQLite query showing recorded speed, estimated RMS current, DC-link voltage, and frequency](docs/assets/sqlite-query-results.png)
+-->
+
 ## Verification
 
 ### Compare with PSIM
@@ -317,7 +370,7 @@ From the repository root:
 py -3 -m unittest discover -s tests -v
 node --check dashboard/app.js
 node --check dashboard/charts.js
-node --test tests/test_hmi_ui.js tests/test_hmi_charts.js
+node --test tests/test_hmi_ui.js tests/test_hmi_charts.js tests/test_hmi_transport.js
 ```
 
 The Python suite compiles native controller tests and requires MinGW32 GCC at the path specified in `tests/test_drive_controller.py`. For Octave checks, run from `octave/`:
@@ -335,7 +388,7 @@ py -3 -m tests.test_system_integration
 py -3 -m tests.test_control_integration
 ```
 
-System integration requires Octave, Mosquitto, and Paho. Control integration requires Octave and MinGW32 GCC and exercises the DLL in an isolated x86 host. Generated test signals are confined to these checks.
+System integration requires Octave, Mosquitto, and Paho. Control integration requires Octave and MinGW32 GCC and exercises the DLL in an isolated x86 host. The unit suite also exercises real local WebSocket and MQTT connections. Generated test signals are confined to these checks. Validate the native PSIM circuit separately using the procedure above.
 
 ## Troubleshooting
 
@@ -363,7 +416,7 @@ octave/                  GNU Octave supervisor, diagnostics, and persistence
   src/                   Separate analytical motor calculations
   scripts/               Explicit baseline calculation entry point
   tests/                 Numerical and diagnostic checks
-mqtt/                    Optional telemetry publisher and dependency specification
+mqtt/                    Telemetry publication, event notifications, and broker contracts
 psim/                    Native PSIM schematic
 results/                 Local generated data; ignored except for .gitkeep
 tests/                   Backend, frontend, controller, and integration checks
@@ -371,4 +424,4 @@ orchestrator.py          Application lifecycle entry point
 start.bat / stop.bat     Windows launch and shutdown commands
 ```
 
-Additional guides: [Drive control](docs/control_hmi.md) · [Data verification](docs/psim_data_verification.md) · [HMI design](docs/hmi_design.md) · [Control audit](docs/plc_hmi_audit.md) · [Octave module](octave/README.md).
+Additional guides: [Drive control](docs/control_hmi.md) · [Data verification](docs/psim_data_verification.md) · [HMI design](docs/hmi_design.md) · [Control audit](docs/plc_hmi_audit.md) · [Octave module](octave/README.md) · [Monitoring and history](docs/iiot_integration.md).

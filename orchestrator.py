@@ -13,9 +13,12 @@ from application.config import PROJECT_ROOT, load_config
 from application.data_store import DataStore, read_json, write_json
 from application.services import ServiceManager
 from application.recording_retention import enforce_recording_quota
+from application.historian import Historian
+from application.telemetry import TelemetryHub
 from application.windows_processes import acquire_instance_lock
 from dashboard.server import HMIRequestHandler, LocalServer
 from mqtt.publisher import MQTTPublisher
+from mqtt.consumer import MQTTConsumer
 
 STATE_FILE = PROJECT_ROOT / '.runtime.json'
 
@@ -83,11 +86,18 @@ def main():
     settings['fisier_oprire'] = str(runtime_dir / 'oprire.flag')
     stop_event = threading.Event()
     store = DataStore(settings, instance_id)
+    historian = Historian(settings, store, stop_event)
     servicii = ServiceManager(settings, store, runtime_dir, stop_event)
     mqtt = MQTTPublisher(settings['mqtt'], store, stop_event)
     server.store = store
     server.servicii = servicii
     server.mqtt = mqtt
+    server.historian = historian
+    consumer = MQTTConsumer(settings, stop_event, historian.enqueue_event)
+    server.mqtt_consumer = consumer
+    telemetry = TelemetryHub(server, stop_event)
+    server.telemetry = telemetry
+    mqtt.events = telemetry
     def on_signal(signal_number, frame):
         stop_event.set()
     signal.signal(signal.SIGINT, on_signal)
@@ -103,6 +113,9 @@ def main():
         prune_new_recordings(settings, store)
         servicii.start()
         mqtt.start()
+        historian.start()
+        consumer.start()
+        telemetry.start()
         web_thread.start()
         print(f'HMI: {url}\nOprire: Ctrl+C sau stop.bat. PSIM se porneste manual cu F8.', flush=True)
         if settings['deschide_browser'] and not options.fara_browser:
@@ -123,7 +136,10 @@ def main():
         stop_event.set()
         print('Oprire controlata a serviciilor proprii...', flush=True)
         mqtt.close()
+        consumer.close()
+        telemetry.close()
         servicii.close()
+        historian.close()
         if web_thread.is_alive():
             server.shutdown()
         server.server_close()

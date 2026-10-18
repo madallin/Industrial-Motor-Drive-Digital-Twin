@@ -88,7 +88,9 @@ class ServiceManager:
             self.messages['octave'] = 'Receptia si calculele Octave sunt dezactivate.'
         mqtt = self.settings['mqtt']
         if mqtt['activ']:
-            state = check_broker(mqtt['adresa'], mqtt['port'])
+            # TLS brokers are managed externally; don't probe them as plaintext
+            # MQTT or replace their listener with an anonymous local broker.
+            state = 'MQTT' if mqtt.get('tls') else check_broker(mqtt['adresa'], mqtt['port'])
             if state == 'MQTT':
                 self.messages['broker'] = 'Broker existent; nu este detinut de orchestrator.'
             elif state == 'LIBER' and mqtt['porneste_broker_local'] and mqtt['adresa'] in ('127.0.0.1', 'localhost'):

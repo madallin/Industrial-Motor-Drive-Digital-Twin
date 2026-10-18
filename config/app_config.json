@@ -31,7 +31,8 @@
     "port": 1883,
     "prefix": "industrial-drive/v2",
     "porneste_broker_local": true,
-    "executabil_broker": ""
+    "executabil_broker": "",
+    "tls": false
   },
   "diagnostic": {
     "ready_vdc_low_v": 510,
@@ -77,5 +78,26 @@
   },
   "recording": {
     "max_storage_mb": 512
+  },
+  "iiot": {
+    "historian": {
+      "enabled": true,
+      "sample_interval_s": 0.05,
+      "retention_days": 30,
+      "max_sample_rows": 200000,
+      "max_event_rows": 50000,
+      "max_size_mb": 128
+    },
+    "websocket": {
+      "enabled": true,
+      "interval_s": 0.75,
+      "max_clients": 8,
+      "event_buffer": 512,
+      "send_timeout_s": 3
+    },
+    "notifications": {
+      "enabled": true,
+      "max_items": 200
+    }
   }
 }

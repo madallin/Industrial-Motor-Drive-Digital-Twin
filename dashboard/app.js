@@ -9,7 +9,7 @@ const processStates={INIT:'Inițializare',PRECHARGE:'Preîncărcare',READY:'Preg
 const driveStates={PRECHARGE:'Preîncărcare',READY:'Pregătit',STARTING:'Accelerare',RUNNING:'În funcțiune',STOPPING:'Decelerare',COASTING:'Rotire prin inerție',STOPPED:'Oprit',FAULT:'Protecție declanșată'};
 const driveFaults=['','Supracurent','Subtensiune','Supratensiune','Supraturație','Comunicație întreruptă','Măsurători invalide','Oprire nefinalizată','Preîncărcare nefinalizată','Suprasarcină termică','Rotor blocat','Accelerare nereușită'];
 const rejectionReasons=['','Referință invalidă','DC-link nepregatit','Defect memorat','Rotorul încă se rotește','Oprire în curs','Condiții de reset neîndeplinite'];
-const conditions={DATA_GAP:'Întrerupere eșantionare',PRECHARGE_RESET:'Preîncărcare reluată',PRECHARGE_READY:'Preîncărcare finalizată',START_BEFORE_READY:'Pornire înainte de preîncărcare',I_RMS_WARN:'Curent RMS ridicat',I_RMS_HIGH:'Curent RMS peste limită',VDC_LOW_WARN:'Tensiune DC-link scăzută',VDC_LOW_HIGH:'Subtensiune DC-link',VDC_HIGH_WARN:'Tensiune DC-link ridicată',VDC_HIGH_HIGH:'Supratensiune DC-link',SPEED_WARN:'Abatere de turație',SPEED_HIGH:'Abatere mare de turație'};
+const conditions={MQTT_EVENT_GAP:'Notificări incomplete; consultă înregistrările',EVENT_JOURNAL_GAP:'Evenimente incomplete; consultă înregistrările',MQTT_CONNECTED:'Conexiune MQTT restabilită',MQTT_DISCONNECTED:'Legătura cu brokerul întreruptă',MQTT_PUBLISHER_OFFLINE:'Publicare telemetrie oprită',COMMUNICATION_LOST:'Măsurători întrerupte',ACQUISITION_ACTIV:'Achiziție măsurători activă',ACQUISITION_ASTEPTARE:'Așteptare măsurători',ACQUISITION_INDISPONIBIL:'Achiziție indisponibilă',ACQUISITION_OPRIT:'Achiziție oprită',DATA_GAP:'Întrerupere eșantionare',PRECHARGE_RESET:'Preîncărcare reluată',PRECHARGE_READY:'Preîncărcare finalizată',START_BEFORE_READY:'Pornire înainte de preîncărcare',I_RMS_WARN:'Curent RMS ridicat',I_RMS_HIGH:'Curent RMS peste limită',VDC_LOW_WARN:'Tensiune DC-link scăzută',VDC_LOW_HIGH:'Subtensiune DC-link',VDC_HIGH_WARN:'Tensiune DC-link ridicată',VDC_HIGH_HIGH:'Supratensiune DC-link',SPEED_WARN:'Abatere de turație',SPEED_HIGH:'Abatere mare de turație'};
 const severityLabels={INFO:'Informare',STATE:'Stare',WARN:'Avertizare',ALARM:'Alarmă',CLEARED:'Revenire'};
 const conditionLabel=code=>code?.startsWith('DRIVE_')?(driveStates[code.slice(6)]||code):code==='CMD_ACCEPTED'?'Comandă acceptată':code?.startsWith('CMD_REJECT_')?'Comandă respinsă':code?.startsWith('TO_')?(processStates[code.slice(3)]||code):(conditions[code]||code);
 const eventValue=(code,value)=>{
@@ -17,7 +17,8 @@ const eventValue=(code,value)=>{
   const unit=code?.startsWith('I_RMS')?' A':code?.startsWith('VDC')||code?.startsWith('PRECHARGE_')||code==='START_BEFORE_READY'?' V':code?.startsWith('SPEED')?' %':code==='DATA_GAP'?' s':'';
   return formatNumber(value,code==='DATA_GAP'?3:2)+unit;
 };
-const appState={page:'operation',system:null,history:null,busy:false,pollCount:0,commandBusy:false,commandError:false};
+let telemetryTransport=null;
+const appState={streamEvents:[],streamInstance:null,page:'operation',system:null,history:null,busy:false,pollCount:0,commandBusy:false,commandError:false};
 async function fetchJson(url){
   const response=await fetch(url,{cache:'no-store',signal:AbortSignal.timeout(6000)});
   const data=await response.json();
@@ -96,6 +97,7 @@ function render(){
   for(const key of ['rpm','frecventa','curent','rms','vdc']) text('reading-'+key,formatNumber(latest?.[key],key==='rpm'?0:key==='curent'||key==='rms'?2:1));
   if(reception.eroare){element('connection-error').hidden=false;text('connection-error','Achiziție indisponibilă. Verifică simularea și repornește aplicația.');}
   renderControls();
+  if(typeof renderIntegrations==='function')renderIntegrations(system.iiot,system.mqtt);
   const alarms=[...(data.istoric_alarme||[])];
   for(const alarm of data.alarme||[]){
     if(!alarms.some(a=>a.cod===alarm.cod&&a.revenire_s==null))alarms.push(alarm);
@@ -105,7 +107,7 @@ function render(){
   text('process-state',control.disponibil?(control.aplicat?.fault?driveFaults[control.aplicat.fault]:(driveStates[control.aplicat?.drive_state]||'Stare necunoscută')):'Fără stare curentă');
   text('alarm-note',live?'Monitorizare curentă':data.puncte?.length?'Ultima înregistrare · stare istorică':'Fără măsurători curente');
   renderTable('alarm-table',alarmRows(alarms,live),'Nicio alarmă sau avertizare înregistrată.',6);
-  renderTable('event-table',eventRows(data.evenimente||[]),'Niciun eveniment.',4);
+  renderTable('event-table',eventRows(telemetryTransport?.lastFrame&&appState.streamEvents.length?appState.streamEvents.filter(event=>event.session_id==null||event.session_id===data.id||event.session_id?.startsWith(data.metadate?.session_id+'_part')).map(event=>({t:event.sim_time_s,nivel:event.level||event.severity,cod:event.code,valoare:event.value})):data.evenimente||[]),'Niciun eveniment.',4);
   text('chart-axis-context','Timp simulat [s]');
   text('chart-context',data.puncte?.length&&!live?'Ultima înregistrare':'');
   element('chart-context').dataset.recorded=Boolean(data.puncte?.length&&!live);
@@ -220,6 +222,12 @@ async function refresh(){
   }catch(error){
     console.error('HMI refresh failed',error);
     text('connection-error','Conexiune întreruptă. Verifică dacă aplicația rulează.');element('connection-error').hidden=false;
+    invalidateLive();
+  }finally{appState.busy=false;}
+}
+
+function invalidateLive(){
+    if(typeof invalidateIntegrations==='function')invalidateIntegrations();
     // Remove stale readings and disable controls when the HTTP connection fails.
     for(const key of ['rpm','frecventa','curent','rms','vdc'])text('reading-'+key,'—');
     for(const id of ['frequency-input','load-input','acceleration-input','deceleration-input','apply-references','start-command','stop-command','reset-command'])element(id).disabled=true;
@@ -235,8 +243,24 @@ async function refresh(){
       text('alarm-note','Conexiune întreruptă · stare istorică');
       renderTable('alarm-table',alarmRows(appState.system.psim.istoric_alarme||[],false),'Starea alarmelor curente nu este disponibilă.',6);
     }
-  }finally{appState.busy=false;}
 }
+function startTelemetry(){
+  if(typeof TelemetryTransport!=='function'){setInterval(refresh,1000);return;}
+  telemetryTransport=new TelemetryTransport({
+    url:()=>`ws://${location.host}/api/stream?fereastra=${selectedWindow()}`,
+    onFrame:frame=>{
+      if(frame.instance_id!==appState.streamInstance){appState.streamEvents=[];appState.streamInstance=frame.instance_id;}
+      for(const event of frame.events||[]){
+        if(event.source==='psim'&&!appState.streamEvents.some(previous=>previous.id===event.id))appState.streamEvents.push(event);
+      }
+      appState.streamEvents=appState.streamEvents.slice(-200);
+      appState.system=frame.system;element('connection-error').hidden=true;render();
+    },
+    onUnavailable:invalidateLive,onStatus:value=>text('transport-status',value),poll:refresh
+  });
+  telemetryTransport.start();
+}
+
 async function fetchHistory(){
   const selection=element('recording-selector').value;
   const data=selection?await fetchJson('/api/inregistrare?sesiune='+encodeURIComponent(selection)+'&fereastra='+selectedWindow()):null;
@@ -254,6 +278,13 @@ async function fetchHistory(){
   }
   renderTable('recording-table',(data?.esantioane_recente||[]).slice().reverse().map(p=>[formatNumber(p.t,6),formatNumber(p.rpm,6),formatNumber(p.curent,6),formatNumber(p.rms,6),formatNumber(p.vdc,6),formatNumber(p.frecventa,6)]),'Niciun eșantion.',6);
   drawCharts();
+}
+async function refreshRecordings(){
+  try{
+    const sessions=(await fetchJson('/api/sesiuni')).sesiuni,selection=element('recording-selector');
+    refreshSessionOptions(selection,sessions,selection.value);
+    await fetchHistory();
+  }catch{text('recording-metadata','Înregistrările nu pot fi citite. Reîncercare automată…');}
 }
 function drawCharts(){
   if(appState.page==='operation'){
@@ -274,7 +305,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   element('reset-command').addEventListener('click',()=>sendCommand('reset'));
   element('start-command').addEventListener('click',()=>sendCommand('porneste'));
   element('stop-command').addEventListener('click',()=>sendCommand('opreste'));
-  element('time-window').addEventListener('change',refresh);
+  element('time-window').addEventListener('change',()=>{if(telemetryTransport){telemetryTransport.stop();startTelemetry();}refresh();});
   element('signal-selector').addEventListener('change',drawCharts);
   element('recording-signal-selector').addEventListener('change',drawCharts);
   element('recording-selector').addEventListener('change',refresh);
@@ -284,5 +315,9 @@ document.addEventListener('DOMContentLoaded',()=>{
     element(reframeId).addEventListener('click',()=>{element(chartId)._scale=null;element(chartId)._signature=null;drawCharts();});
   }
   window.addEventListener('resize',drawCharts);
-  restoreDraft();refreshReferenceSummary();refresh();setInterval(refresh,750);
+  restoreDraft();refreshReferenceSummary();refresh();startTelemetry();
+  element('historian-details').addEventListener('toggle',()=>{if(element('historian-details').open)loadHistorianSessions();});
+  element('query-historian').addEventListener('click',queryHistorian);
+  setInterval(()=>{if(appState.page==='recordings')refreshRecordings();},10000);
+  window.addEventListener('beforeunload',()=>telemetryTransport?.stop());
 });

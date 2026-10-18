@@ -1,8 +1,11 @@
 """Serve the local HMI and API while GNU Octave owns numerical processing."""
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import sqlite3
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
+from application.telemetry import system_snapshot
+from .stream import serve_stream
 
 DASHBOARD_DIR = Path(__file__).resolve().parent
 
@@ -14,6 +17,7 @@ class LocalServer(ThreadingHTTPServer):
 
 class HMIRequestHandler(BaseHTTPRequestHandler):
     server_version = 'IndustrialDrive/2'
+    rbufsize = 0
 
     def setup(self):
         super().setup()
@@ -29,14 +33,38 @@ class HMIRequestHandler(BaseHTTPRequestHandler):
         params = parse_qs(request.query)
         file_path = request.path
         store = self.server.store
+        if file_path == '/api/stream':
+            try:
+                window = float((params.get('fereastra') or [store.settings['fereastra_s']])[0])
+                if not 0.1 <= window <= 86400:
+                    raise ValueError()
+            except ValueError:
+                return self.respond({'mesaj': 'Interval invalid.'}, 400)
+            return serve_stream(self, window)
+        if file_path.startswith('/api/historian/'):
+            try:
+                historian = self.server.historian
+                if file_path == '/api/historian/sessions':
+                    return self.respond({'sessions': historian.sessions(), 'status': historian.state})
+                if file_path == '/api/historian/events':
+                    value = lambda name, default: (params.get(name) or [default])[0]
+                    return self.respond(historian.query_events(value('source', ''), float(value('start', 0)),
+                        float(value('end', 1e12)), int(value('after', 0)), int(value('limit', 100))))
+                if file_path == '/api/historian/query':
+                    value = lambda name, default: (params.get(name) or [default])[0]
+                    return self.respond(historian.query(value('session', ''), float(value('start', 0)),
+                        float(value('end', 1e12)), value('axis', 'simulation'), int(value('limit', 1000)), float(value('after', -1))))
+            except (OSError, sqlite3.Error):
+                return self.respond({'mesaj': 'Istoricul structurat nu este disponibil.'}, 503)
+            except (ValueError, TypeError):
+                return self.respond({'mesaj': 'Interval istoric invalid.'}, 400)
+            return self.respond({'mesaj': 'Resursa inexistenta.'}, 404)
         if file_path == '/api/stare':
             try:
                 window_seconds = max(0.1, min(86400, float((params.get('fereastra') or [store.settings['fereastra_s']])[0])))
             except ValueError:
                 window_seconds = store.settings['fereastra_s']
-            return self.respond({'servicii': self.server.servicii.state(), 'mqtt': self.server.mqtt.state,
-                'psim': store.live_source('psim', window_seconds), 'receptie': store.psim_reception(),
-                'control': self.server.servicii.control.state(self.server.servicii.state().get('octave', {}).get('activ', False))})
+            return self.respond(system_snapshot(self.server, window_seconds))
         if file_path == '/api/sesiuni':
             return self.respond({'sesiuni': [s for s in store.sessions() if s['sursa'] == 'psim']})
         if file_path == '/api/inregistrare':
@@ -72,7 +100,8 @@ class HMIRequestHandler(BaseHTTPRequestHandler):
                 pass
             return
         static_files = {'/': ('index.html', 'text/html'), '/app.css': ('app.css', 'text/css'),
-                   '/app.js': ('app.js', 'text/javascript'), '/charts.js': ('charts.js', 'text/javascript')}
+                   '/app.js': ('app.js', 'text/javascript'), '/charts.js': ('charts.js', 'text/javascript'),
+                   '/transport.js': ('transport.js', 'text/javascript'), '/iiot.js': ('iiot.js', 'text/javascript')}
         if file_path not in static_files:
             return self.respond({'mesaj': 'Resursa inexistenta.'}, 404)
         name, kind = static_files[file_path]
@@ -84,13 +113,18 @@ class HMIRequestHandler(BaseHTTPRequestHandler):
         origin = f'http://127.0.0.1:{self.server.server_port}'
         if not self.valid_host() or self.headers.get('Origin', origin) != origin or self.headers.get('Content-Type') != 'application/json':
             return self.respond({'mesaj': 'Origine sau tip de cerere nepermis.'}, 403)
-        if self.path != '/api/control':
+        if self.path not in ('/api/control', '/api/notifications/ack'):
             return self.respond({'mesaj': 'Operatie inexistenta.'}, 404)
         try:
             length = int(self.headers.get('Content-Length', '0'))
             if not 1 <= length <= 2048:
                 raise ValueError()
             request = json.loads(self.rfile.read(length))
+            if self.path == '/api/notifications/ack':
+                if not isinstance(request, dict) or set(request) != {'id'} or not isinstance(request['id'], str):
+                    raise ValueError()
+                acknowledged = self.server.mqtt_consumer.notifications.acknowledge(request['id'])
+                return self.respond({'acknowledged': acknowledged}, 200 if acknowledged else 404)
             active = self.server.servicii.state().get('octave', {}).get('activ', False)
             response, code = self.server.servicii.control.submit(request, active)
             return self.respond(response, code)
@@ -103,7 +137,7 @@ class HMIRequestHandler(BaseHTTPRequestHandler):
         self.send_header('Content-Length', str(length))
         self.send_header('Cache-Control', 'no-store')
         self.send_header('X-Content-Type-Options', 'nosniff')
-        self.send_header('Content-Security-Policy', "default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'")
+        self.send_header('Content-Security-Policy', f"default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self' ws://127.0.0.1:{self.server.server_port}; object-src 'none'; base-uri 'none'; frame-ancestors 'none'")
         if download_name:
             self.send_header('Content-Disposition', f'attachment; filename="{download_name}"')
         self.end_headers()

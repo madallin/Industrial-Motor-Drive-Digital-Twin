@@ -12,7 +12,7 @@ const markup=fs.readFileSync(path.join(root,'dashboard/index.html'),'utf8');
 
 test('all static UI element references exist in the HTML',()=>{
   const ids=new Set([...markup.matchAll(/\bid="([^"]+)"/g)].map(match=>match[1]));
-  for(const file of ['app.js','charts.js']){
+  for(const file of ['app.js','charts.js','iiot.js']){
     const source=fs.readFileSync(path.join(root,'dashboard',file),'utf8');
     for(const [,id] of source.matchAll(/\b(?:element|text|renderTable|drawChart)\(\s*'([^']+)'/g)){
       if(id.endsWith('-'))continue; // Dynamic reading IDs are checked below.

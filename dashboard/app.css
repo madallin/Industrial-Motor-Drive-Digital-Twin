@@ -29,6 +29,10 @@
   font-variant-numeric: tabular-nums;
 }
 * { box-sizing: border-box; }
+.history-query { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin-top: 16px; }
+.history-query label { flex: 1 1 150px; min-width: 0; }
+.history-query input { min-height: 36px; }
+#notification-table button { min-height: 30px; padding: 4px 8px; font-size: 12px; }
 html { scrollbar-gutter: stable; }
 body { margin: 0; }
 [hidden] { display: none !important; }
