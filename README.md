@@ -424,4 +424,17 @@ orchestrator.py          Application lifecycle entry point
 start.bat / stop.bat     Windows launch and shutdown commands
 ```
 
+## License, Copyright & Confidentiality Terms
+
+**Copyright © 2026 Ioan-Mădălin Munteanu. All rights reserved.**
+
+This project is strictly **proprietary and confidential**. The source code, software architecture, DB schemes, SCL routines, and graphical HMI layout assets are published publicly on GitHub **SORELY for portfolio evaluation, academic auditing, and technical interview demonstration purposes** by prospective employers and technical recruiters.
+
+**Under no circumstances is any user, corporation, or entity permitted to:**
+1. Download, clone, copy, or duplicate this code for implementation inside real-world commercial production lines or industrial manufacturing plants.
+2. Modify, transform, or build derivative industrial automation solutions based on the logic designs contained within this repository.
+3. Redistribute, re-license, publish, or sell these engineering files to third parties.
+
+*The engineering files are provided purely "as-is" for interview presentation metrics, without any structural warranties regarding real-world hardware deployment safety.*
+
 Additional guides: [Drive control](docs/control_hmi.md) · [Data verification](docs/psim_data_verification.md) · [HMI design](docs/hmi_design.md) · [Control audit](docs/plc_hmi_audit.md) · [Octave module](octave/README.md) · [Monitoring and history](docs/iiot_integration.md).
